@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Roleta de Prêmios</title>
+  <style>
+    body { text-align: center; font-family: Arial; }
+    input, button { margin: 10px; padding: 8px; font-size: 16px; }
+  </style>
+</head>
+<body>
+  <h1>🎁 Roleta de Prêmios</h1>
+  <input id="nick" placeholder="Digite seu nick">
+  <button onclick="girar()">Girar!</button>
+  <p id="resultado"></p>
+
+  <script>
+    // URL da WebApp do Google Apps Script
+    const API_URL = "https://script.google.com/macros/s/AKfycbwt9GgDTFKKAmUeqTZuPrlWy2R7bSAbz2EApE2dxIDkCZvAlfK0uN8ULn6oUqPSf3PuUg/exec";
+
+    const premios = [
+      {nome: "Skin rara", chance: 50},
+      {nome: "100 moedas", chance: 30},
+      {nome: "Nada 😢", chance: 20}
+    ];
+
+    function sortearPremio() {
+      let total = premios.reduce((acc, p) => acc + p.chance, 0);
+      let r = Math.random() * total;
+      let acumulado = 0;
+      for (let p of premios) {
+        acumulado += p.chance;
+        if (r <= acumulado) return p.nome;
+      }
+    }
+
+    async function girar() {
+      const nick = document.getElementById("nick").value.trim();
+      if (!nick) return alert("Digite seu nick!");
+
+      let premio = sortearPremio();
+      document.getElementById("resultado").innerText = 
+        `${nick} ganhou: ${premio}`;
+
+      // Enviar pro Google Sheets
+      try {
+        await fetch(API_URL, {
+          method: "POST",
+          body: JSON.stringify({ nick, premio }),
+          headers: { "Content-Type": "application/json" }
+        });
+      } catch (e) {
+        alert("Erro ao salvar resultado: " + e);
+      }
+    }
+  </script>
+</body>
+</html>
