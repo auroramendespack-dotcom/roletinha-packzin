@@ -8,30 +8,69 @@
     h1 { margin-top: 20px; }
     input, button { margin: 10px; padding: 10px; font-size: 16px; }
     #resultado { font-weight: bold; margin-top: 20px; font-size: 18px; color: #333; }
-    .box { background: #fff; padding: 20px; margin: 40px auto; width: 320px; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+    canvas { margin-top: 20px; background: #fff; border-radius: 50%; box-shadow: 0 0 15px rgba(0,0,0,0.2); }
+    .pointer { width: 0; height: 0; margin: 20px auto; border-left: 20px solid transparent; border-right: 20px solid transparent; border-bottom: 40px solid red; }
   </style>
 </head>
 <body>
-  <div class="box">
-    <h1>🎁 Roleta de Prêmios</h1>
-    <input id="nick" placeholder="Digite seu nick">
-    <br>
-    <button onclick="girar()">Girar!</button>
-    <p id="resultado"></p>
-  </div>
+  <h1>🎁 Roleta de Prêmios</h1>
+  <input id="nick" placeholder="Digite seu nick">
+  <br>
+  <button onclick="girar()">Girar!</button>
+  <div class="pointer"></div>
+  <canvas id="roleta" width="400" height="400"></canvas>
+  <p id="resultado"></p>
 
   <script>
     // === SUA API DO GOOGLE APPS SCRIPT ===
     const API_URL = "https://script.google.com/macros/s/AKfycbz_qOsdx0avjQZ0Hg6ktnTeYknYAb3x-nmdnHvwVZ0K0KVZSk6QSxuQkMoi2KdPX8wNuQ/exec";
 
-    // === CONFIGURAÇÃO DOS PRÊMIOS (ajuste as chances) ===
+    // === CONFIGURAÇÃO DOS PRÊMIOS ===
     const premios = [
-      { nome: "Skin rara", chance: 50 },
-      { nome: "100 moedas", chance: 30 },
-      { nome: "Nada 😢", chance: 20 }
+      { nome: "Skin rara", chance: 50, cor: "#FFD700" },
+      { nome: "100 moedas", chance: 30, cor: "#87CEEB" },
+      { nome: "Nada 😢", chance: 20, cor: "#FF6347" }
     ];
 
-    // Sorteio proporcional às chances
+    const canvas = document.getElementById("roleta");
+    const ctx = canvas.getContext("2d");
+    const radius = canvas.width / 2;
+
+    let angulos = []; // armazenar ângulos de cada fatia
+    let girando = false;
+
+    // Desenhar a roleta
+    function desenharRoleta() {
+      let total = premios.reduce((acc, p) => acc + p.chance, 0);
+      let anguloInicial = 0;
+      angulos = [];
+
+      premios.forEach(p => {
+        const fatia = (p.chance / total) * 2 * Math.PI;
+        ctx.beginPath();
+        ctx.moveTo(radius, radius);
+        ctx.arc(radius, radius, radius, anguloInicial, anguloInicial + fatia);
+        ctx.fillStyle = p.cor;
+        ctx.fill();
+
+        // Texto
+        ctx.save();
+        ctx.translate(radius, radius);
+        ctx.rotate(anguloInicial + fatia / 2);
+        ctx.textAlign = "right";
+        ctx.fillStyle = "#000";
+        ctx.font = "16px Arial";
+        ctx.fillText(p.nome, radius - 10, 5);
+        ctx.restore();
+
+        angulos.push({ premio: p.nome, inicio: anguloInicial, fim: anguloInicial + fatia });
+        anguloInicial += fatia;
+      });
+    }
+
+    desenharRoleta();
+
+    // Sorteio baseado na probabilidade
     function sortearPremio() {
       const total = premios.reduce((acc, p) => acc + p.chance, 0);
       let r = Math.random() * total;
@@ -42,23 +81,53 @@
       }
     }
 
-    async function girar() {
+    // Girar a roleta
+    function girar() {
+      if (girando) return;
       const nick = document.getElementById("nick").value.trim();
       if (!nick) { alert("Digite seu nick!"); return; }
 
+      girando = true;
       const premio = sortearPremio();
-      document.getElementById("resultado").innerText = `${nick} ganhou: ${premio}`;
 
-      // Enviar para o Google Sheets
-      try {
-        await fetch(API_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ nick, premio }).toString()
-        });
-      } catch (e) {
-        alert("Erro ao salvar resultado: " + e);
+      // Encontrar ângulo alvo
+      const alvo = angulos.find(a => a.premio === premio);
+      const meio = (alvo.inicio + alvo.fim) / 2;
+
+      // Rotação extra para dar mais voltas
+      const voltas = 5 * 2 * Math.PI;
+      const anguloFinal = (2 * Math.PI - meio) + voltas;
+
+      let anguloAtual = 0;
+      let velocidade = 0.25;
+
+      function animar() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(radius, radius);
+        ctx.rotate(anguloAtual);
+        ctx.translate(-radius, -radius);
+        desenharRoleta();
+        ctx.restore();
+
+        if (anguloAtual < anguloFinal) {
+          anguloAtual += velocidade;
+          if (velocidade > 0.01) velocidade *= 0.99; // desaceleração
+          requestAnimationFrame(animar);
+        } else {
+          girando = false;
+          document.getElementById("resultado").innerText = `${nick} ganhou: ${premio}`;
+
+          // Enviar para Google Sheets
+          fetch(API_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: new URLSearchParams({ nick, premio }).toString()
+          });
+        }
       }
+
+      animar();
     }
   </script>
 </body>
