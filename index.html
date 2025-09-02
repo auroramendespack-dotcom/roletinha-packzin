@@ -9,7 +9,12 @@
     input, button { margin: 10px; padding: 10px; font-size: 16px; }
     #resultado { font-weight: bold; margin-top: 20px; font-size: 18px; color: #333; }
     canvas { margin-top: 20px; background: #fff; border-radius: 50%; box-shadow: 0 0 15px rgba(0,0,0,0.2); }
-    .pointer { width: 0; height: 0; margin: 20px auto; border-left: 20px solid transparent; border-right: 20px solid transparent; border-bottom: 40px solid red; }
+    .pointer {
+      width: 0; height: 0; margin: 20px auto;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-bottom: 40px solid red; /* seta apontando para baixo (topo da roleta) */
+    }
   </style>
 </head>
 <body>
@@ -21,8 +26,8 @@
   <canvas id="roleta" width="400" height="400"></canvas>
   <p id="resultado"></p>
 
-  <!-- Sons -->
-  <audio id="somRoleta" src="https://actions.google.com/sounds/v1/alarms/cycle_alarm.ogg" preload="auto"></audio>
+  <!-- Sons (pode trocar os URLs se quiser outros efeitos) -->
+  <audio id="somTick" src="https://actions.google.com/sounds/v1/impacts/wood_plank_flicks.ogg" preload="auto"></audio>
   <audio id="somVitoria" src="https://actions.google.com/sounds/v1/crowds/cheer.ogg" preload="auto"></audio>
 
   <script>
@@ -30,55 +35,60 @@
     const API_URL = "https://script.google.com/macros/s/AKfycbz_qOsdx0avjQZ0Hg6ktnTeYknYAb3x-nmdnHvwVZ0K0KVZSk6QSxuQkMoi2KdPX8wNuQ/exec";
 
     // === CONFIGURAÇÃO DOS PRÊMIOS ===
+    // Deixe os "chances" reais aqui. Visualmente, as fatias são sempre iguais.
     const premios = [
-      { nome: "Skin rara", chance: 50, cor: "#FFD700" },
+      { nome: "Skin rara",  chance: 50, cor: "#FFD700" },
       { nome: "100 moedas", chance: 30, cor: "#87CEEB" },
-      { nome: "Nada 😢", chance: 20, cor: "#FF6347" }
+      { nome: "Nada 😢",    chance: 20, cor: "#FF6347" }
     ];
 
     const canvas = document.getElementById("roleta");
     const ctx = canvas.getContext("2d");
     const radius = canvas.width / 2;
 
-    let angulos = []; 
-    let girando = false;
-
-    const somRoleta = document.getElementById("somRoleta");
+    const somTick = document.getElementById("somTick");
     const somVitoria = document.getElementById("somVitoria");
 
-    // Desenhar a roleta (fatias iguais)
-    function desenharRoleta() {
-      let anguloInicial = 0;
-      let fatia = (2 * Math.PI) / premios.length;
-      angulos = [];
+    let fatiaAng = (2 * Math.PI) / premios.length;
+    let setores = [];       // { premio, inicio, fim }
+    let girando = false;
 
-      premios.forEach(p => {
+    // Desenha a roleta (fatias iguais)
+    function desenharRoleta() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      setores = [];
+
+      let inicio = 0;
+      for (const p of premios) {
+        const fim = inicio + fatiaAng;
+
+        // fatia
         ctx.beginPath();
         ctx.moveTo(radius, radius);
-        ctx.arc(radius, radius, radius, anguloInicial, anguloInicial + fatia);
+        ctx.arc(radius, radius, radius, inicio, fim);
         ctx.fillStyle = p.cor;
         ctx.fill();
 
-        // Texto
+        // texto
         ctx.save();
         ctx.translate(radius, radius);
-        ctx.rotate(anguloInicial + fatia / 2);
+        ctx.rotate(inicio + fatiaAng / 2);
         ctx.textAlign = "right";
         ctx.fillStyle = "#000";
         ctx.font = "16px Arial";
         ctx.fillText(p.nome, radius - 10, 5);
         ctx.restore();
 
-        angulos.push({ premio: p.nome, inicio: anguloInicial, fim: anguloInicial + fatia });
-        anguloInicial += fatia;
-      });
+        setores.push({ premio: p.nome, inicio, fim });
+        inicio = fim;
+      }
     }
 
-    desenharRoleta();
+    desenharRoleta(); // desenho inicial sem rotação
 
-    // Sorteio REAL baseado na chance
+    // Sorteio REAL baseado nas chances
     function sortearPremio() {
-      const total = premios.reduce((acc, p) => acc + p.chance, 0);
+      const total = premios.reduce((s, p) => s + p.chance, 0);
       let r = Math.random() * total;
       let acumulado = 0;
       for (const p of premios) {
@@ -87,59 +97,73 @@
       }
     }
 
-    // Girar a roleta (tempo fixo: 10s)
+    // Normaliza um ângulo para [0, 2π)
+    function normalizarAng(a) {
+      const doisPi = 2 * Math.PI;
+      a = a % doisPi;
+      if (a < 0) a += doisPi;
+      return a;
+    }
+
+    // Animação de giro (fixo: 10s) e alinhamento no topo (seta)
     function girar() {
       if (girando) return;
       const nick = document.getElementById("nick").value.trim();
       if (!nick) { alert("Digite seu nick!"); return; }
 
       girando = true;
+
+      // Prêmio sorteado (probabilidade real)
       const premio = sortearPremio();
 
-      // Encontrar ângulo alvo
-      const alvo = angulos.find(a => a.premio === premio);
+      // Centro angular da fatia do prêmio
+      const alvo = setores.find(s => s.premio === premio);
       const meio = (alvo.inicio + alvo.fim) / 2;
 
-      // Adiciona voltas extras
-      const voltas = 10 * 2 * Math.PI;
-      // Corrigido: garante que o prêmio pare alinhado com a seta vermelha
-      const anguloFinal = voltas - (Math.PI / 2 - meio);
+      // Queremos que "meio" chegue ao topo (3π/2 rad)
+      const offsetTopo = normalizarAng(3 * Math.PI / 2 - meio);
 
-      let anguloAtual = 0;
-      const duracao = 10000; // 10 segundos
+      // Várias voltas + offset até a seta
+      const voltas = 10 * 2 * Math.PI;   // 10 voltas completas
+      const anguloFinal = voltas + offsetTopo;
+
+      // Animação (10s com ease out cúbico)
       const inicio = performance.now();
-      let ultimoTick = 0;
+      const duracao = 10000;
+      let passosTick = -1; // para tocar o "tic" quando cruzar bordas
 
-      function animar(tempo) {
-        const progresso = (tempo - inicio) / duracao;
+      function frame(t) {
+        const progresso = Math.min(1, (t - inicio) / duracao);
+        const easeOut = 1 - Math.pow(1 - progresso, 3);
+        const anguloAtual = anguloFinal * easeOut;
+
+        // desenha roleta já rotacionada
+        ctx.save();
+        ctx.translate(radius, radius);
+        ctx.rotate(anguloAtual); // rotação positiva = sentido horário
+        ctx.translate(-radius, -radius);
+        desenharRoleta();
+        ctx.restore();
+
+        // toca "tic" a cada borda de fatia que passa sob a seta
+        const passoAtual = Math.floor(anguloAtual / fatiaAng);
+        if (passoAtual !== passosTick) {
+          try { somTick.currentTime = 0; somTick.play(); } catch (e) {}
+          passosTick = passoAtual;
+        }
+
         if (progresso < 1) {
-          const easeOut = 1 - Math.pow(1 - progresso, 3); // desaceleração suave
-          anguloAtual = anguloFinal * easeOut;
-
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.save();
-          ctx.translate(radius, radius);
-          ctx.rotate(anguloAtual);
-          ctx.translate(-radius, -radius);
-          desenharRoleta();
-          ctx.restore();
-
-          // Efeito sonoro de "tic tic"
-          if (tempo - ultimoTick > 150) { 
-            somRoleta.currentTime = 0;
-            somRoleta.play();
-            ultimoTick = tempo;
-          }
-
-          requestAnimationFrame(animar);
+          requestAnimationFrame(frame);
         } else {
           girando = false;
+
+          // resultado final
           document.getElementById("resultado").innerText = `${nick} ganhou: ${premio}`;
 
-          // Som de vitória
-          somVitoria.play();
+          // som de comemoração
+          try { somVitoria.currentTime = 0; somVitoria.play(); } catch (e) {}
 
-          // Enviar para Google Sheets
+          // envia para planilha
           fetch(API_URL, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -148,7 +172,7 @@
         }
       }
 
-      requestAnimationFrame(animar);
+      requestAnimationFrame(frame);
     }
   </script>
 </body>
