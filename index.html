@@ -103,7 +103,7 @@
       // Adiciona voltas extras
       const voltas = 10 * 2 * Math.PI;
       // Corrigido: garante que o prêmio pare alinhado com a seta vermelha
-      const anguloFinal = voltas + (Math.PI / 2 - meio);
+      const anguloFinal = voltas - (Math.PI / 2 - meio);
 
       let anguloAtual = 0;
       const duracao = 10000; // 10 segundos
