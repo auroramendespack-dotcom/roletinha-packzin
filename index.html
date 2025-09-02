@@ -21,6 +21,10 @@
   <canvas id="roleta" width="400" height="400"></canvas>
   <p id="resultado"></p>
 
+  <!-- Sons -->
+  <audio id="somRoleta" src="https://actions.google.com/sounds/v1/alarms/cycle_alarm.ogg" preload="auto"></audio>
+  <audio id="somVitoria" src="https://actions.google.com/sounds/v1/crowds/cheer.ogg" preload="auto"></audio>
+
   <script>
     // === SUA API DO GOOGLE APPS SCRIPT ===
     const API_URL = "https://script.google.com/macros/s/AKfycbz_qOsdx0avjQZ0Hg6ktnTeYknYAb3x-nmdnHvwVZ0K0KVZSk6QSxuQkMoi2KdPX8wNuQ/exec";
@@ -38,6 +42,9 @@
 
     let angulos = []; 
     let girando = false;
+
+    const somRoleta = document.getElementById("somRoleta");
+    const somVitoria = document.getElementById("somVitoria");
 
     // Desenhar a roleta (fatias iguais)
     function desenharRoleta() {
@@ -95,11 +102,13 @@
 
       // Adiciona voltas extras
       const voltas = 10 * 2 * Math.PI;
-      const anguloFinal = (2 * Math.PI - meio) + voltas;
+      // Corrigido: garante que o prêmio pare alinhado com a seta vermelha
+      const anguloFinal = voltas + (Math.PI / 2 - meio);
 
       let anguloAtual = 0;
       const duracao = 10000; // 10 segundos
       const inicio = performance.now();
+      let ultimoTick = 0;
 
       function animar(tempo) {
         const progresso = (tempo - inicio) / duracao;
@@ -115,10 +124,20 @@
           desenharRoleta();
           ctx.restore();
 
+          // Efeito sonoro de "tic tic"
+          if (tempo - ultimoTick > 150) { 
+            somRoleta.currentTime = 0;
+            somRoleta.play();
+            ultimoTick = tempo;
+          }
+
           requestAnimationFrame(animar);
         } else {
           girando = false;
           document.getElementById("resultado").innerText = `${nick} ganhou: ${premio}`;
+
+          // Som de vitória
+          somVitoria.play();
 
           // Enviar para Google Sheets
           fetch(API_URL, {
